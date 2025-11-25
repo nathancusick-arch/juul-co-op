@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from datetime import datetime, timedelta
 
 # -----------------------
 # Column Mapping
@@ -84,6 +85,17 @@ if uploaded is not None:
     # Filter CoopTCG rows
     df = df[df["site_code"].astype(str).str.startswith("CoopTCG")]
 
+    # Convert date_of_visit
+    df["date_parsed"] = pd.to_datetime(df["date_of_visit"], dayfirst=True, errors="coerce")
+
+    # -----------------------
+    # REMOVE audits after most recent Saturday
+    # -----------------------
+    today = datetime.now().date()
+    most_recent_saturday = today - timedelta(days=(today.weekday() - 5) % 7)
+
+    df = df[df["date_parsed"].dt.date <= most_recent_saturday]
+
     # Retailer rename
     df["Retailer"] = df["client_name"].replace("Juul", "Co-operative Group Limited")
 
@@ -91,15 +103,14 @@ if uploaded is not None:
     df["primary_result"] = df["primary_result"].astype(str).str.upper()
 
     # Month/Year like KNIME
-    parsed = pd.to_datetime(df["date_of_visit"], dayfirst=True, errors="coerce")
-    df["__KNIME_MONTH__"] = parsed.dt.month.astype("Int64").astype(str).replace("<NA>", "")
-    df["__KNIME_YEAR__"] = parsed.dt.year.astype("Int64").astype(str).replace("<NA>", "")
+    df["__KNIME_MONTH__"] = df["date_parsed"].dt.month.astype("Int64").astype(str).replace("<NA>", "")
+    df["__KNIME_YEAR__"] = df["date_parsed"].dt.year.astype("Int64").astype(str).replace("<NA>", "")
 
     # Sort in chronological order
-    df["_sort_date"] = pd.to_datetime(df["date_of_visit"], dayfirst=True, errors="coerce")
+    df["_sort_date"] = df["date_parsed"]
     df["_sort_time"] = pd.to_datetime(df["time_of_visit"], errors="coerce")
     df = df.sort_values(by=["_sort_date", "_sort_time"])
-    df = df.drop(columns=["_sort_date", "_sort_time"])
+    df = df.drop(columns=["_sort_date", "_sort_time", "date_parsed"])
 
     # Build final output
     final = pd.DataFrame({col: df.apply(lambda r: map_value(r, src), axis=1)
